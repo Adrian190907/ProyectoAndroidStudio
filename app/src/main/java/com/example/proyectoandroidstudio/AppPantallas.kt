@@ -1,98 +1,61 @@
 package com.example.proyectoandroidstudio
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.proyectoandroidstudio.ui.theme.colores
 
 @Composable
-fun App() {
-    var mascotas by remember { mutableStateOf(MascotasRepository.getMascotas()) }
-
-    var idSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
-
-    var mostrarFormulario by rememberSaveable { mutableStateOf(false) }
-
-    var idParaEditar by rememberSaveable { mutableStateOf<String?>(null) }
-
-    var idParaEliminar by rememberSaveable { mutableStateOf<String?>(null) }
-
-    val seleccionada = mascotas.find { it.id == idSeleccionado }
-
-    val editar = mascotas.find { it.id == idParaEditar }
-
-    val eliminar = mascotas.find { it.id == idParaEliminar }
-
-    BackHandler(
-        enabled = idSeleccionado != null &&
-                !mostrarFormulario &&
-                idParaEditar == null &&
-                idParaEliminar == null
-    ) {
-        idSeleccionado = null
-    }
+fun App(viewModel: MascotasViewModel = viewModel()) {
+    val navController = rememberNavController()
+    val uiState = viewModel.uiState
+    val editar = uiState.mascotaParaEditar
+    val eliminar = uiState.mascotaParaEliminar
 
     MaterialTheme(colorScheme = colores) {
-        if (seleccionada == null) {
-            PantallaMisMascotas(
-                mascotas = mascotas,
-                onMascota = {
-                    idSeleccionado = it.id
-                },
-                onAniadirMascota = {
-                    mostrarFormulario = true
+        NavHost(
+            navController = navController,
+            startDestination = Rutas.MIS_MASCOTAS
+        ) {
+            composable(Rutas.MIS_MASCOTAS) {
+                PantallaMisMascotas(
+                    mascotas = uiState.mascotas,
+                    onMascota = { mascota -> navController.navigate(Rutas.detalle(mascota.id)) },
+                    onAniadirMascota = { viewModel.aniadirMascota() }
+                )
+            }
+
+            composable(
+                route = Rutas.DETALLE,
+                arguments = listOf(navArgument("idMascota") { type = NavType.StringType })
+            ) { backStackEntry ->
+
+                val idMascota = backStackEntry.arguments?.getString("idMascota")
+                val seleccionada = uiState.mascotas.find { it.id == idMascota }
+
+                if (seleccionada != null) {
+                    DetalleMascota(
+                        mascotas = uiState.mascotas,
+                        idMascota = seleccionada.id,
+                        onVolver = { navController.popBackStack() },
+                        onEditar = { viewModel.editarMascota(seleccionada) },
+                        onEliminar = { viewModel.eliminarMascota(seleccionada) }
+                    )
                 }
-            )
-        } else {
-            DetalleMascota(
-                mascotas = mascotas,
-                idMascota = seleccionada.id,
-                onVolver = {
-                    idSeleccionado = null
-                },
-                onEditar = {
-                    idParaEditar = seleccionada.id
-                },
-                onEliminar = {
-                    idParaEliminar = seleccionada.id
-                }
-            )
+            }
         }
 
-        if (mostrarFormulario || editar != null) {
+        if (uiState.mostrarFormulario || editar != null) {
             FormularioMascotaDialog(
                 mascotaInicial = editar,
-                onCancelar = {
-                    mostrarFormulario = false
-                    idParaEditar = null
-                },
+                onCancelar = { viewModel.cancelarFormulario() },
                 onGuardar = { nombre, especie, raza, edad, peso, vacunado, fechaNacimiento, sexo, veterinario, clinica, direccion, descripcion ->
-                    val mascota = Mascotas(
-                        id = editar?.id ?: java.util.UUID.randomUUID().toString(),
-                        nombre = nombre,
-                        especie = especie,
-                        raza = raza,
-                        edad = edad,
-                        peso = peso,
-                        vacunado = vacunado,
-                        fechaNacimiento = fechaNacimiento.ifBlank { "Sin registrar" },
-                        sexo = sexo.ifBlank { "Sin registrar" },
-                        veterinario = veterinario.ifBlank { "Sin registrar" },
-                        clinica = clinica.ifBlank { "Sin registrar" },
-                        direccion = direccion.ifBlank { "Sin registrar" },
-                        descripcion = descripcion.ifBlank { "Sin descripción" }
-                    )
-
-                    if (editar == null) {
-                        MascotasRepository.addMascota(mascota)
-                    } else {
-                        MascotasRepository.updateMascota(mascota)
-                    }
-
-                    mascotas = MascotasRepository.getMascotas()
-                    mostrarFormulario = false
-                    idParaEditar = null
+                    viewModel.guardarMascota(nombre, especie, raza, edad, peso, vacunado, fechaNacimiento, sexo, veterinario, clinica, direccion, descripcion)
                 }
             )
         }
@@ -100,14 +63,9 @@ fun App() {
         if (eliminar != null) {
             ConfirmarEliminarMascotaDialog(
                 mascota = eliminar,
-                onCancelar = {
-                    idParaEliminar = null
-                },
-                onConfirmar = {
-                    MascotasRepository.deleteMascota(eliminar.id)
-                    mascotas = MascotasRepository.getMascotas()
-                    idParaEliminar = null
-                    idSeleccionado = null
+                onCancelar = { viewModel.cancelarEliminar() },
+                onConfirmar = { viewModel.confirmarEliminar()
+                    navController.popBackStack()
                 }
             )
         }
